@@ -8,7 +8,7 @@ import (
 	"syscall"
 
 	"github.com/juju/errors"
-	"go-mysqlbin/river"
+	"github.com/mengyh/go-mysqlbin/river"
 	log "github.com/sirupsen/logrus"
 )
 
