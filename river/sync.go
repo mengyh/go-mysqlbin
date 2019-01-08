@@ -54,7 +54,8 @@ func (h *eventHandler) OnRotate(e *replication.RotateEvent) error {
 }
 
 func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) error {
-	if len(r.c.ESAddr)>0{
+	if len(h.r.c.ESAddr)>0{
+
 	}else{
 		var sdatabase string
 		var inSchema string
