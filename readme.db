@@ -1,1 +1,5 @@
-hello  
+工具描述：
+主要mysql-binlog的定制同步，主从同步，主主同步
+采用go语言编写
+启动并记录日志命令
+nohup /src/go-mysqlbin/bin/go-mysqlbin -config=/src/go-mysqlbin/etc/river.toml >> /src/go-mysqlbin/ceshi.log 2>&1 &
