@@ -69,13 +69,14 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 			dosql=fmt.Sprintf("%s",e.Query)
 			dosql=strings.ToLower(dosql)
 			if strings.Index(dosql,"create table")>=0{
-				reg := regexp.MustCompile(`\s+[0-9a-zA-Z_]+\s+\(`)
+				reg := regexp.MustCompile(`.+`)
 				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
-				reg1 := regexp.MustCompile(`[0-9a-zA-Z_]+`)
+				reg1 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
 				tablename=fmt.Sprintf("%s",reg1.FindString(tablename));
 				err := h.r.newRule(sdatabase, tablename)
 				if err != nil {
-					return errors.Trace(err)
+					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+					//return errors.Trace(err)
 				}
 				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
 				if !ok {
@@ -83,9 +84,10 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				}
 				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename); 
 				if err != nil {
-					return errors.Trace(err)
+					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+				}else{
+					h.r.rules[ruleKey(sdatabase, tablename)]=rule
 				}
-				h.r.rules[ruleKey(sdatabase, tablename)]=rule
 			}else if strings.Index(dosql,"drop table")>=0{
 				reg := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
 				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
@@ -271,7 +273,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 				if rule.TableInfo.Name == "alp_merchant_order" || rule.TableInfo.Name == "alp_delivery_detial" || rule.TableInfo.Name == "alp_merchant_order_item"{
 					continue
 				}else{
-					dosql="delete * from "
+					dosql="delete from "
 					dosql+=rule.TableInfo.Name
 					dosql+=" where "
 					dosql+=rule.TableInfo.Columns[0].Name
@@ -280,21 +282,17 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 					if values[0] !=nil{
 						var cbyte string
 						cbyte=fmt.Sprintf("%T",values[0])
-						if cbyte=="string"{
-							valuest=fmt.Sprintf("%s",values[0])
-						}else if cbyte=="float64" {
-							valuest=fmt.Sprintf("%.2f",values[0])
-						}else if cbyte=="float" {
-							valuest=fmt.Sprintf("%.2f",values[0])
-						}else if cbyte=="[]uint8" {
-							valuest=fmt.Sprintf("%s",values[0])
-						}else{
+						if cbyte=="int" || cbyte=="int64" || cbyte=="int32"  || cbyte=="int8" {
 							valuest=fmt.Sprintf("%d",values[0])
+						}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
+							valuest=fmt.Sprintf("%.2f",values[0])
+						}else{
+							valuest=fmt.Sprintf("%s",values[0])
 						}
 					}else{
 						return nil, errors.Errorf("删除记录无条件")
 					}
-					dosql+=valuest
+					dosql+="'"+valuest+"'"
 				}
 			} else if action == canal.InsertAction{
 				var valuest string
@@ -310,20 +308,17 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 					if values[j] !=nil{
 						var cbyte string
 						cbyte=fmt.Sprintf("%T",values[j])
-						if cbyte=="string"{
-							valuest=fmt.Sprintf("%s",values[j])
-						}else if cbyte=="float64" {
-							valuest=fmt.Sprintf("%.2f",values[j])
-						}else if cbyte=="float" {
-							valuest=fmt.Sprintf("%.2f",values[j])
-						}else if cbyte=="[]uint8" {
-							valuest=fmt.Sprintf("%s",values[j])
-						}else{
+						if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8"{
 							valuest=fmt.Sprintf("%d",values[j])
+						}else if cbyte=="float64" || cbyte=="float8" || cbyte=="float32" {
+							valuest=fmt.Sprintf("%.2f",values[j])
+						}else{
+							valuest=fmt.Sprintf("%s",values[j])
 						}
 					}else{
 						valuest=""
 					}
+					valuest="'"+valuest+"'"
 					vals=append(vals,valuest)
 				}
 				dosql+="("+strings.Join(keys,",")+")values("
@@ -417,20 +412,16 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 				if !rule.CheckFilter(c.Name) {
 					continue
 				}
-				if rows[i][j] !=nil{
+				if rows[i+1][j] !=nil{
 					var cbyte string
 					cbyte=fmt.Sprintf("%T",rows[i][j])
 					//log.Warnf("-----------%s--------------%s-----------------",c.Name,cbyte)
-					if cbyte=="string"{
-						valuest=fmt.Sprintf("%s",rows[i][j])
-					}else if cbyte=="float64" {
-						valuest=fmt.Sprintf("%.2f",rows[i][j])
-					}else if cbyte=="float" {
-						valuest=fmt.Sprintf("%.2f",rows[i][j])
-					}else if cbyte=="[]uint8" {
-						valuest=fmt.Sprintf("%s",rows[i][j])
+					if cbyte=="int" || cbyte=="int64" || cbyte=="int32" {
+						valuest=fmt.Sprintf("%d",rows[i+1])
+					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" {
+						valuest=fmt.Sprintf("%.2f",rows[i+1])
 					}else{
-						valuest=fmt.Sprintf("%d",rows[i][j])
+						valuest=fmt.Sprintf("%s",rows[i+1])
 					}
 				}else{
 					valuest=""
