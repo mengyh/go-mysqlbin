@@ -102,6 +102,22 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 					}
 				}
 				h.r.rules = rules
+			}else{
+				reg := regexp.MustCompile(`.+`)
+				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
+				reg1 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
+				tablename=fmt.Sprintf("%s",reg1.FindString(tablename));
+				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
+				if !ok {
+					return nil
+				}
+				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename); 
+				if err != nil {
+					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+				}else{
+					h.r.rules[ruleKey(sdatabase, tablename)]=rule
+				}
+
 			}
 			conn, _ := client.Connect(h.r.c.MytoAddr, h.r.c.MytoUser, h.r.c.MytoPassword, sdatabase)
 			res, err := conn.Execute(dosql)
