@@ -6,9 +6,8 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
-
 	"github.com/juju/errors"
-	"github.com/mengyh/go-mysqlbin/river"
+	"river"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"sync"
 	"github.com/juju/errors"
-	"github.com/mengyh/go-mysqlbin/elastic"
+	"elastic"
 	"github.com/siddontang/go-mysql/canal"
 	log "github.com/sirupsen/logrus"
 )

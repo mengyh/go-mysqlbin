@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/juju/errors"
-	"github.com/mengyh/go-mysqlbin/elastic"
+	"elastic"
 	"github.com/siddontang/go-mysql/canal"
 	"github.com/siddontang/go-mysql/client"
 	"github.com/siddontang/go-mysql/mysql"
@@ -61,6 +61,7 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 		var inSchema string
 		var dosql string
 		var tablename string
+		var tablename1 string
 		for _, s := range h.r.c.Sources {
 			sdatabase = s.Schema
 		}
@@ -69,13 +70,18 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 			dosql=fmt.Sprintf("%s",e.Query)
 			dosql=strings.ToLower(dosql)
 			if strings.Index(dosql,"create table")>=0{
-				reg := regexp.MustCompile(`.+`)
-				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
-				reg1 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename));
+				reg := regexp.MustCompile("\\s+[0-9a-zA-Z_`]+\\s+\\(")
+				tablename=fmt.Sprintf("%s",reg.FindString(dosql))
+				reg1 := regexp.MustCompile("[0-9a-zA-Z_]+")
+				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
+				reg2 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
+				tablename1=fmt.Sprintf("%s",reg2.FindString(tablename))
+				if len(tablename1)>0{
+					tablename=tablename1
+				}
 				err := h.r.newRule(sdatabase, tablename)
 				if err != nil {
-					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+					log.Warnf("---%s------%s------%s------",dosql,tablename,err)
 					//return errors.Trace(err)
 				}
 				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
@@ -84,7 +90,7 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				}
 				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename); 
 				if err != nil {
-					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+					log.Warnf("---%s------%s-------%s-----",dosql,tablename,err)
 				}else{
 					h.r.rules[ruleKey(sdatabase, tablename)]=rule
 				}
@@ -92,7 +98,7 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				reg := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
 				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
 				reg1 := regexp.MustCompile(`[0-9a-zA-Z_]+`)
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename));
+				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
 				rules := make(map[string]*Rule)
 				for key, rule := range h.r.rules {
 					if key == ruleKey(sdatabase, tablename) {
@@ -103,17 +109,20 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				}
 				h.r.rules = rules
 			}else{
-				reg := regexp.MustCompile(`.+`)
+				reg := regexp.MustCompile("table\\s+[0-9a-zA-Z_`]+\\s+")
 				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
-				reg1 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename));
+				reg1 := regexp.MustCompile("\\s+[0-9a-zA-Z_`]+")
+				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
+				reg2 := regexp.MustCompile("[0-9a-zA-Z_]+")
+				tablename=fmt.Sprintf("%s",reg2.FindString(tablename))
+				var err error
 				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
 				if !ok {
 					return nil
 				}
-				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename); 
+				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename)
 				if err != nil {
-					log.Warnf("---------%s----------------%s-----------------",tablename,err)
+					log.Warnf("---------%s----------------%s------------3-----",tablename,err)
 				}else{
 					h.r.rules[ruleKey(sdatabase, tablename)]=rule
 				}
@@ -321,15 +330,19 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 						continue
 					}
 					keys=append(keys,c.Name)
-					if values[j] !=nil{
-						var cbyte string
-						cbyte=fmt.Sprintf("%T",values[j])
-						if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8"{
-							valuest=fmt.Sprintf("%d",values[j])
-						}else if cbyte=="float64" || cbyte=="float8" || cbyte=="float32" {
-							valuest=fmt.Sprintf("%.2f",values[j])
+					if len(values)>j{
+						if values[j] !=nil{
+							var cbyte string
+							cbyte=fmt.Sprintf("%T",values[j])
+							if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8"{
+								valuest=fmt.Sprintf("%d",values[j])
+							}else if cbyte=="float64" || cbyte=="float8" || cbyte=="float32" {
+								valuest=fmt.Sprintf("%.2f",values[j])
+							}else{
+								valuest=fmt.Sprintf("%s",values[j])
+							}
 						}else{
-							valuest=fmt.Sprintf("%s",values[j])
+							valuest=""
 						}
 					}else{
 						valuest=""
@@ -353,8 +366,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 		conn, _ := client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
 		res, err := conn.Execute(dosql)
 		if err != nil {
-			log.Warnf("-------------------------%v-----------------",dosql)
-			log.Warnf("-------------------------%s-----------------",err)
+			log.Warnf("---------%s----------------%s-----------------",dosql,err)
 			//return nil,errors.Trace(err)
 		}else{
 			log.Warnf("-------------------------%v-----------------",res)

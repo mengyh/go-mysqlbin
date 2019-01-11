@@ -354,6 +354,7 @@ func (c *Canal) GetTable(db string, table string) (*schema.Table, error) {
 // ClearTableCache clear table cache
 func (c *Canal) ClearTableCache(db []byte, table []byte) {
 	key := fmt.Sprintf("%s.%s", db, table)
+	key=strings.ToLower(key)
 	c.tableLock.Lock()
 	delete(c.tables, key)
 	if c.cfg.DiscardNoMetaRowEvent {
