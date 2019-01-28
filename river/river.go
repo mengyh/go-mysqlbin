@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"time"
 	"github.com/juju/errors"
 	"elastic"
 	"github.com/siddontang/go-mysql/canal"
+	"github.com/siddontang/go-mysql/client"
+	//"github.com/jmoiron/sqlx"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,6 +31,12 @@ type River struct {
 	wg sync.WaitGroup
 
 	es *elastic.Client
+
+	my *client.Conn
+
+	rdosql int32
+
+	lastsavetime time.Time
 
 	st *stat
 
@@ -73,8 +82,17 @@ func NewRiver(c *Config) (*River, error) {
 		cfg.Password = r.c.ESPassword
 		cfg.Https = r.c.ESHttps
 		r.es = elastic.NewClient(cfg)
+	}else{
+		var sdatabase string
+		for _, s := range r.c.Sources {
+			sdatabase = s.Schema
+		}
+		//dns := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8", r.c.MytoUser, r.c.MytoPassword, r.c.MytoAddr, sdatabase)
+		//r.my, err = sqlx.Connect("mysql",dns)
+		r.my, err = client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
 	}
-	//else do to mysql
+	r.lastsavetime=time.Now()
+	r.rdosql=0
 	r.st = &stat{r: r}
 	go r.st.Run(r.c.StatAddr)
 	return r, nil

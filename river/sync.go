@@ -18,7 +18,6 @@ import (
 	"time"
 	"regexp"
 )
-
 const (
 	syncInsertDoc = iota
 	syncDeleteDoc
@@ -52,7 +51,6 @@ func (h *eventHandler) OnRotate(e *replication.RotateEvent) error {
 
 	return h.r.ctx.Err()
 }
-
 func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) error {
 	if len(h.r.c.ESAddr)>0{
 
@@ -78,6 +76,11 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				tablename1=fmt.Sprintf("%s",reg2.FindString(tablename))
 				if len(tablename1)>0{
 					tablename=tablename1
+				}else{
+					reg := regexp.MustCompile("(?i)^create\\s+table\\s+(.*?)+\\s")
+					var mb = [][]byte{}
+					mb=reg.FindSubmatch(e.Query)
+					tablename=fmt.Sprintf("%s",mb[1])
 				}
 				err := h.r.newRule(sdatabase, tablename)
 				if err != nil {
@@ -122,7 +125,7 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				}
 				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename)
 				if err != nil {
-					log.Warnf("---------%s----------------%s------------3-----",tablename,err)
+					log.Warnf("---------%s----------------%s-----------------",tablename,err)
 				}else{
 					h.r.rules[ruleKey(sdatabase, tablename)]=rule
 				}
@@ -329,7 +332,6 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 					if !rule.CheckFilter(c.Name) {
 						continue
 					}
-					keys=append(keys,c.Name)
 					if len(values)>j{
 						if values[j] !=nil{
 							var cbyte string
@@ -347,8 +349,11 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 					}else{
 						valuest=""
 					}
-					valuest="'"+valuest+"'"
-					vals=append(vals,valuest)
+					if len(valuest)>0{
+						keys=append(keys,c.Name)
+						valuest="'"+valuest+"'"
+						vals=append(vals,valuest)
+					}
 				}
 				dosql+="("+strings.Join(keys,",")+")values("
 				dosql+=strings.Join(vals,",")+")"
@@ -358,23 +363,38 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 	}
 	if len(r.c.ESAddr)>0{
 	}else{
-		
-		var sdatabase string
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
+		for{
+			if r.rdosql>r.c.Mytomaxcon{
+				time.Sleep(time.Duration(1)*time.Second)
+				break
+			}else{
+				break
+			}
 		}
-		conn, _ := client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
-		res, err := conn.Execute(dosql)
-		if err != nil {
-			log.Warnf("---------%s----------------%s-----------------",dosql,err)
-			//return nil,errors.Trace(err)
-		}else{
-			log.Warnf("-------------------------%v-----------------",res)
-		}
+		go r.runsql(dosql)
 	}
 	return reqs, nil
 }
-
+func (r *River) runsql(dosql string){
+	var err error
+	var sdatabase string
+	for _, s := range r.c.Sources {
+		sdatabase = s.Schema
+	}
+	cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
+	r.rdosql=r.rdosql+1
+	res, err := cn.Execute(dosql)
+	r.rdosql=r.rdosql-1
+	if err != nil {
+		log.Warnf("---------%s-----------%s-----------------",dosql,err)
+	}else{
+		log.Warnf("--------------------%v-----------------",res)
+	}
+	if(r.rdosql<10){
+		r.rdosql=0;
+	}
+	cn.Close()
+}
 func (r *River) makeInsertRequest(rule *Rule, rows [][]interface{}) ([]*elastic.BulkRequest, error) {
 
 	return r.makeRequest(rule, canal.InsertAction, rows)
@@ -442,25 +462,27 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 				}
 				if rows[i+1][j] !=nil{
 					var cbyte string
-					cbyte=fmt.Sprintf("%T",rows[i][j])
+					cbyte=fmt.Sprintf("%T",rows[i+1][j])
 					//log.Warnf("-----------%s--------------%s-----------------",c.Name,cbyte)
-					if cbyte=="int" || cbyte=="int64" || cbyte=="int32" {
-						valuest=fmt.Sprintf("%d",rows[i+1])
-					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" {
-						valuest=fmt.Sprintf("%.2f",rows[i+1])
+					if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8" {
+						valuest=fmt.Sprintf("%d",rows[i+1][j])
+					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
+						valuest=fmt.Sprintf("%.2f",rows[i+1][j])
 					}else{
-						valuest=fmt.Sprintf("%s",rows[i+1])
+						valuest=fmt.Sprintf("%s",rows[i+1][j])
+					}
+					if(j==0){
+						wherev=valuest
 					}
 				}else{
 					valuest=""
 				}
-				if i==0 && j==0{
-					wherev=valuest
+				if len(valuest)>0{
+					dosql+=rule.TableInfo.Columns[j].Name
+					dosql+="="
+					dosql+="'"+valuest+"'"
+					dosql+=","
 				}
-				dosql+=rule.TableInfo.Columns[j].Name
-				dosql+="="
-				dosql+="'"+valuest+"'"
-				dosql+=","
 			}
 			var r = []rune(dosql)
 			var sublen=len(r)-1
@@ -473,19 +495,15 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 	}
 	if len(r.c.ESAddr)>0{
 	}else{
-		var sdatabase string
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
+		for{
+			if r.rdosql>r.c.Mytomaxcon{
+				time.Sleep(time.Duration(1)*time.Second)
+				break
+			}else{
+				break
+			}
 		}
-		conn, _ := client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
-		res, err := conn.Execute(dosql)
-		if err != nil {
-			log.Warnf("-------------------------%v-----------------",dosql)
-			log.Warnf("-------------------------%s-----------------",err)
-			//return nil,errors.Trace(err)
-		}else{
-			log.Warnf("-------------------------%v-----------------",res)
-		}
+		go r.runsql(dosql)
 	}
 	return reqs, nil
 }

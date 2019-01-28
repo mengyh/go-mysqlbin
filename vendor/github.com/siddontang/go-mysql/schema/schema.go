@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/errors"
 	"github.com/siddontang/go-mysql/mysql"
+	log "github.com/sirupsen/logrus"
 )
 
 var ErrTableNotExist = errors.New("table is not exist")

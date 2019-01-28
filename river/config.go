@@ -22,6 +22,7 @@ type Config struct {
 	MytoUser     string `toml:"myto_user"`
 	MytoPassword string `toml:"myto_pass"`
 	MytoCharset  string `toml:"myto_charset"`
+	Mytomaxcon  int32 `toml:"myto_maxcon"`
 
 	ESHttps    bool   `toml:"es_https"`
 	ESAddr     string `toml:"es_addr"`
