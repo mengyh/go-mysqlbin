@@ -271,19 +271,19 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 	reqs := make([]*elastic.BulkRequest, 0, len(rows))
 	var dosql string
 	for _, values := range rows {
-		id, err := r.getDocID(rule, values)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		parentID := ""
-		if len(rule.Parent) > 0 {
-			if parentID, err = r.getParentID(rule, values, rule.Parent); err != nil {
+		if len(r.c.ESAddr)>0{
+			id, err := r.getDocID(rule, values)
+			if err != nil {
 				return nil, errors.Trace(err)
 			}
-		}
-		req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
-		if len(r.c.ESAddr)>0{
+
+			parentID := ""
+			if len(rule.Parent) > 0 {
+				if parentID, err = r.getParentID(rule, values, rule.Parent); err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
+			req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: id, Parent: parentID}
 			if action == canal.DeleteAction {
 				if rule.TableInfo.Name == "alp_merchant_order" || rule.TableInfo.Name == "alp_delivery_detial" || rule.TableInfo.Name == "alp_merchant_order_item"{
 					continue
@@ -416,27 +416,27 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 	dosql+=" set "
 	reqs := make([]*elastic.BulkRequest, 0, len(rows))
 	for i := 0; i < len(rows); i += 2 {
-		beforeID, err := r.getDocID(rule, rows[i])
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		afterID, err := r.getDocID(rule, rows[i+1])
-
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-
-		beforeParentID, afterParentID := "", ""
-		if len(rule.Parent) > 0 {
-			if beforeParentID, err = r.getParentID(rule, rows[i], rule.Parent); err != nil {
-				return nil, errors.Trace(err)
-			}
-			if afterParentID, err = r.getParentID(rule, rows[i+1], rule.Parent); err != nil {
-				return nil, errors.Trace(err)
-			}
-		}
 		if len(r.c.ESAddr)>0{
+		beforeID, err := r.getDocID(rule, rows[i])
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			afterID, err := r.getDocID(rule, rows[i+1])
+
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			beforeParentID, afterParentID := "", ""
+			if len(rule.Parent) > 0 {
+				if beforeParentID, err = r.getParentID(rule, rows[i], rule.Parent); err != nil {
+					return nil, errors.Trace(err)
+				}
+				if afterParentID, err = r.getParentID(rule, rows[i+1], rule.Parent); err != nil {
+					return nil, errors.Trace(err)
+				}
+			}
 			req := &elastic.BulkRequest{Index: rule.Index, Type: rule.Type, ID: beforeID, Parent: beforeParentID}
 			if beforeID != afterID || beforeParentID != afterParentID {
 				req.Action = elastic.ActionDelete
