@@ -59,7 +59,6 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 		var inSchema string
 		var dosql string
 		var tablename string
-		var tablename1 string
 		for _, s := range h.r.c.Sources {
 			sdatabase = s.Schema
 		}
@@ -68,20 +67,12 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 			dosql=fmt.Sprintf("%s",e.Query)
 			dosql=strings.ToLower(dosql)
 			if strings.Index(dosql,"create table")>=0{
-				reg := regexp.MustCompile("\\s+[0-9a-zA-Z_`]+\\s+\\(")
-				tablename=fmt.Sprintf("%s",reg.FindString(dosql))
+				var mb = [][]byte{}
+				reg := regexp.MustCompile("(?i)^create\\s+table\\s+(.*?)+\\s")
+				mb=reg.FindSubmatch(e.Query)
+				tablename=fmt.Sprintf("%s",mb[1])
 				reg1 := regexp.MustCompile("[0-9a-zA-Z_]+")
 				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
-				reg2 := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
-				tablename1=fmt.Sprintf("%s",reg2.FindString(tablename))
-				if len(tablename1)>0{
-					tablename=tablename1
-				}else{
-					reg := regexp.MustCompile("(?i)^create\\s+table\\s+(.*?)+\\s")
-					var mb = [][]byte{}
-					mb=reg.FindSubmatch(e.Query)
-					tablename=fmt.Sprintf("%s",mb[1])
-				}
 				err := h.r.newRule(sdatabase, tablename)
 				if err != nil {
 					log.Warnf("---%s------%s------%s------",dosql,tablename,err)
@@ -298,30 +289,26 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 			reqs = append(reqs, req)
 		}else{
 			if action == canal.DeleteAction {
-				if rule.TableInfo.Name == "alp_merchant_order" || rule.TableInfo.Name == "alp_delivery_detial" || rule.TableInfo.Name == "alp_merchant_order_item"{
-					continue
-				}else{
-					dosql="delete from "
-					dosql+=rule.TableInfo.Name
-					dosql+=" where "
-					dosql+=rule.TableInfo.Columns[0].Name
-					dosql+="="
-					var valuest string
-					if values[0] !=nil{
-						var cbyte string
-						cbyte=fmt.Sprintf("%T",values[0])
-						if cbyte=="int" || cbyte=="int64" || cbyte=="int32"  || cbyte=="int8" {
-							valuest=fmt.Sprintf("%d",values[0])
-						}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
-							valuest=fmt.Sprintf("%.2f",values[0])
-						}else{
-							valuest=fmt.Sprintf("%s",values[0])
-						}
+				dosql="delete from "
+				dosql+=rule.TableInfo.Name
+				dosql+=" where "
+				dosql+=rule.TableInfo.Columns[0].Name
+				dosql+="="
+				var valuest string
+				if values[0] !=nil{
+					var cbyte string
+					cbyte=fmt.Sprintf("%T",values[0])
+					if cbyte=="int" || cbyte=="int64" || cbyte=="int32"  || cbyte=="int8" {
+						valuest=fmt.Sprintf("%d",values[0])
+					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
+						valuest=fmt.Sprintf("%.2f",values[0])
 					}else{
-						return nil, errors.Errorf("删除记录无条件")
+						valuest=fmt.Sprintf("%s",values[0])
 					}
-					dosql+="'"+valuest+"'"
+				}else{
+					return nil, errors.Errorf("删除记录无条件")
 				}
+				dosql+="'"+valuest+"'"
 			} else if action == canal.InsertAction{
 				var valuest string
 				dosql="insert into "
@@ -363,15 +350,32 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 	}
 	if len(r.c.ESAddr)>0{
 	}else{
-		for{
-			if r.rdosql>r.c.Mytomaxcon{
-				time.Sleep(time.Duration(1)*time.Second)
-				break
-			}else{
-				break
+		//删除数据不走协程
+		if action == canal.DeleteAction {
+			var err error
+			var sdatabase string
+			for _, s := range r.c.Sources {
+				sdatabase = s.Schema
 			}
+			cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
+			res, err := cn.Execute(dosql)
+			if err != nil {
+				log.Warnf("---------%s-----------%s-----------------",dosql,err)
+			}else{
+				log.Warnf("--------------------%v-----------------",res)
+			}
+			cn.Close()	
+		}else{
+			for{
+				if r.rdosql>r.c.Mytomaxcon{
+					time.Sleep(time.Duration(1)*time.Second)
+					break
+				}else{
+					break
+				}
+			}
+			go r.runsql(dosql)
 		}
-		go r.runsql(dosql)
 	}
 	return reqs, nil
 }
@@ -386,12 +390,30 @@ func (r *River) runsql(dosql string){
 	res, err := cn.Execute(dosql)
 	r.rdosql=r.rdosql-1
 	if err != nil {
-		log.Warnf("---------%s-----------%s-----------------",dosql,err)
+		//log.Warnf("---------%s-----------%s-----------------",dosql,err)
+		go r.wrunsql(dosql)
 	}else{
 		log.Warnf("--------------------%v-----------------",res)
 	}
 	if(r.rdosql<10){
 		r.rdosql=0;
+	}
+	cn.Close()
+}
+//协程先后问题
+func (r *River) wrunsql(dosql string){
+	time.Sleep(time.Duration(1)*time.Second)
+	var err error
+	var sdatabase string
+	for _, s := range r.c.Sources {
+		sdatabase = s.Schema
+	}
+	cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
+	res, err := cn.Execute(dosql)
+	if err != nil {
+		log.Warnf("---------%s-----------%s-----------------",dosql,err)
+	}else{
+		log.Warnf("--------------------%v-----------------",res)
 	}
 	cn.Close()
 }
