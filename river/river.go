@@ -9,6 +9,7 @@ import (
 	"time"
 	"github.com/juju/errors"
 	"elastic"
+	"github.com/siddontang/go-mysql/mysql"
 	"github.com/siddontang/go-mysql/canal"
 	"github.com/siddontang/go-mysql/client"
 	//"github.com/jmoiron/sqlx"
@@ -35,6 +36,7 @@ type River struct {
 	my *client.Conn
 
 	rdosql int32
+	posbuf mysql.Position
 
 	lastsavetime time.Time
 
@@ -83,13 +85,14 @@ func NewRiver(c *Config) (*River, error) {
 		cfg.Https = r.c.ESHttps
 		r.es = elastic.NewClient(cfg)
 	}else{
-		var sdatabase string
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
-		}
+		//var sdatabase string
+		//for _, s := range r.c.Sources {
+		//	sdatabase = s.Schema
+		//}
 		//dns := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8", r.c.MytoUser, r.c.MytoPassword, r.c.MytoAddr, sdatabase)
 		//r.my, err = sqlx.Connect("mysql",dns)
-		r.my, err = client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
+		//r.my, err = client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
+		//r.posbuf=04
 	}
 	r.lastsavetime=time.Now()
 	r.rdosql=0

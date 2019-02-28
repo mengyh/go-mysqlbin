@@ -298,7 +298,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 				if values[0] !=nil{
 					var cbyte string
 					cbyte=fmt.Sprintf("%T",values[0])
-					if cbyte=="int" || cbyte=="int64" || cbyte=="int32"  || cbyte=="int8" {
+					if cbyte=="int" || cbyte=="int64" || cbyte=="int32"  || cbyte=="int8" || cbyte=="int16" {
 						valuest=fmt.Sprintf("%d",values[0])
 					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
 						valuest=fmt.Sprintf("%.2f",values[0])
@@ -323,7 +323,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 						if values[j] !=nil{
 							var cbyte string
 							cbyte=fmt.Sprintf("%T",values[j])
-							if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8"{
+							if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8" || cbyte=="int16"{
 								valuest=fmt.Sprintf("%d",values[j])
 							}else if cbyte=="float64" || cbyte=="float8" || cbyte=="float32" {
 								valuest=fmt.Sprintf("%.2f",values[j])
@@ -350,19 +350,19 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 	}
 	if len(r.c.ESAddr)>0{
 	}else{
+		dosql=strings.Replace(dosql, "\\", "\\\\", -1)
 		//删除数据不走协程
-		if action == canal.DeleteAction {
+		if action == canal.DeleteAction || r.posbuf == r.canal.SyncedPosition(){
 			var err error
 			var sdatabase string
+			r.posbuf = r.canal.SyncedPosition()
 			for _, s := range r.c.Sources {
 				sdatabase = s.Schema
 			}
 			cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
 			res, err := cn.Execute(dosql)
 			if err != nil {
-				log.Warnf("---------%s-----------%s-----------------",dosql,err)
-			}else{
-				log.Warnf("--------------------%v-----------------",res)
+				log.Warnf("---------%s-----------%s-----------------",dosql,err,res)
 			}
 			cn.Close()	
 		}else{
@@ -390,10 +390,9 @@ func (r *River) runsql(dosql string){
 	res, err := cn.Execute(dosql)
 	r.rdosql=r.rdosql-1
 	if err != nil {
-		//log.Warnf("---------%s-----------%s-----------------",dosql,err)
+		log.Warnf("---------%s-----------%s-----------------","Warnf:wait for next do",res)
+		time.Sleep(500*time.Nanosecond)
 		go r.wrunsql(dosql)
-	}else{
-		log.Warnf("--------------------%v-----------------",res)
 	}
 	if(r.rdosql<10){
 		r.rdosql=0;
@@ -402,7 +401,6 @@ func (r *River) runsql(dosql string){
 }
 //协程先后问题
 func (r *River) wrunsql(dosql string){
-	time.Sleep(time.Duration(1)*time.Second)
 	var err error
 	var sdatabase string
 	for _, s := range r.c.Sources {
@@ -411,9 +409,7 @@ func (r *River) wrunsql(dosql string){
 	cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
 	res, err := cn.Execute(dosql)
 	if err != nil {
-		log.Warnf("---------%s-----------%s-----------------",dosql,err)
-	}else{
-		log.Warnf("--------------------%v-----------------",res)
+		log.Warnf("error:---------%s-----------%s-----------------",dosql,err,res)
 	}
 	cn.Close()
 }
@@ -486,7 +482,7 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 					var cbyte string
 					cbyte=fmt.Sprintf("%T",rows[i+1][j])
 					//log.Warnf("-----------%s--------------%s-----------------",c.Name,cbyte)
-					if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8" {
+					if cbyte=="int" || cbyte=="int64" || cbyte=="int32" || cbyte=="int8" || cbyte=="int16" {
 						valuest=fmt.Sprintf("%d",rows[i+1][j])
 					}else if cbyte=="float64" || cbyte=="float" || cbyte=="float32" || cbyte=="float8" {
 						valuest=fmt.Sprintf("%.2f",rows[i+1][j])
