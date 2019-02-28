@@ -521,6 +521,7 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 				break
 			}
 		}
+		dosql=strings.Replace(dosql, "\\", "\\\\", -1)
 		go r.runsql(dosql)
 	}
 	return reqs, nil
