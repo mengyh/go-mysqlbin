@@ -390,7 +390,7 @@ func (r *River) runsql(dosql string){
 	res, err := cn.Execute(dosql)
 	r.rdosql=r.rdosql-1
 	if err != nil {
-		log.Warnf("---------%s-----------%s-----------------","Warnf:wait for next do",res)
+		log.Warnf("---------%s-----------%s-----------------","Warnf:wait for next do",err,res)
 		time.Sleep(500*time.Nanosecond)
 		go r.wrunsql(dosql)
 	}
