@@ -336,7 +336,7 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 					}else{
 						valuest=""
 					}
-					if len(valuest)>0{
+					if values[j] !=nil{
 						keys=append(keys,c.Name)
 						valuest="'"+valuest+"'"
 						vals=append(vals,valuest)
@@ -345,27 +345,8 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 				dosql+="("+strings.Join(keys,",")+")values("
 				dosql+=strings.Join(vals,",")+")"
 			}
-		}
-		
-	}
-	if len(r.c.ESAddr)>0{
-	}else{
-		dosql=strings.Replace(dosql, "\\", "\\\\", -1)
-		//删除数据不走协程
-		if action == canal.DeleteAction || r.posbuf == r.canal.SyncedPosition(){
-			var err error
-			var sdatabase string
-			r.posbuf = r.canal.SyncedPosition()
-			for _, s := range r.c.Sources {
-				sdatabase = s.Schema
-			}
-			cn, _:=client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
-			res, err := cn.Execute(dosql)
-			if err != nil {
-				log.Warnf("---------%s-----------%s-----------------",dosql,err,res)
-			}
-			cn.Close()	
-		}else{
+			dosql=strings.Replace(dosql, "\\", "\\\\", -1)
+			//log.Warnf("---------%s--------------------------",dosql)
 			for{
 				if r.rdosql>r.c.Mytomaxcon{
 					time.Sleep(time.Duration(1)*time.Second)
@@ -376,7 +357,9 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 			}
 			go r.runsql(dosql)
 		}
+		
 	}
+
 	return reqs, nil
 }
 func (r *River) runsql(dosql string){
@@ -429,9 +412,6 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 		return nil, errors.Errorf("invalid update rows event, must have 2x rows, but %d", len(rows))
 	}
 	var dosql string
-	dosql="update "
-	dosql+=rule.TableInfo.Name
-	dosql+=" set "
 	reqs := make([]*elastic.BulkRequest, 0, len(rows))
 	for i := 0; i < len(rows); i += 2 {
 		if len(r.c.ESAddr)>0{
@@ -472,6 +452,9 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 
 			reqs = append(reqs, req)
 		}else{
+			dosql="update "
+			dosql+=rule.TableInfo.Name
+			dosql+=" set "
 			var valuest string
 			var wherev string
 			for j,c:=range rule.TableInfo.Columns {
@@ -495,7 +478,7 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 				}else{
 					valuest=""
 				}
-				if len(valuest)>0{
+				if rows[i+1][j] !=nil{
 					dosql+=rule.TableInfo.Columns[j].Name
 					dosql+="="
 					dosql+="'"+valuest+"'"
@@ -510,19 +493,20 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			dosql += "="
 			dosql += "'"+wherev+"'"
 		}
-	}
-	if len(r.c.ESAddr)>0{
-	}else{
-		for{
-			if r.rdosql>r.c.Mytomaxcon{
-				time.Sleep(time.Duration(1)*time.Second)
-				break
-			}else{
-				break
+		//log.Warnf("-----------%s------------------------------",dosql)
+		if len(r.c.ESAddr)>0{
+		}else{
+			for{
+				if r.rdosql>r.c.Mytomaxcon{
+					time.Sleep(time.Duration(1)*time.Second)
+					break
+				}else{
+					break
+				}
 			}
+			dosql=strings.Replace(dosql, "\\", "\\\\", -1)
+			go r.runsql(dosql)
 		}
-		dosql=strings.Replace(dosql, "\\", "\\\\", -1)
-		go r.runsql(dosql)
 	}
 	return reqs, nil
 }
