@@ -601,29 +601,6 @@ func (r *River) getFieldParts(k string, v string) (string, string, string) {
 func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values []interface{}) {
 	req.Data = make(map[string]interface{}, len(values))
 	//fmt.Printf("%#v\n", rule.TableInfo)
-	//定义全局字符串存储
-	var spercontact string
-	var si_zwnk string
-	var si_id string
-	var percontact_r schema.TableColumn
-	var si_zwnk_r schema.TableColumn
-	var si_id_r schema.TableColumn
-	var i_partprice schema.TableColumn
-	var i_dish_refund_price schema.TableColumn
-	var i_price schema.TableColumn
-	var i_boxprice schema.TableColumn
-	var v_discount_acmount schema.TableColumn
-	var v_platform_rate schema.TableColumn
-	var v_shop_rate schema.TableColumn
-	var v_fee schema.TableColumn
-	var v_shopfee schema.TableColumn
-	var v_atotalprice schema.TableColumn
-	var v_asid schema.TableColumn
-	var v_aorderstatus schema.TableColumn
-	var v_aend_deliverytime schema.TableColumn
-	var rider_pay_status schema.TableColumn
-	var rider_pay_time schema.TableColumn
-	var sdatabase string
 	req.Action = elastic.ActionIndex
 	for i, c := range rule.TableInfo.Columns {
 		if !rule.CheckFilter(c.Name) {
@@ -637,238 +614,18 @@ func (r *River) makeInsertReqData(req *elastic.BulkRequest, rule *Rule, values [
 				req.Data[elastic] = r.getFieldValue(&c, fieldType, values[i])
 			}
 		}
-		if c.Name=="createtime" || c.Name=="diningtime"{
-			c.Type=schema.TYPE_NUMBER
-			req.Data[c.Name]=r.getFieldValue(&c, fieldTypeDate, values[i])
-			//log.Warnf("-1-------------------------%s-----------------",values[i])
-		}
-		if rule.TableInfo.Name == "alp_merchant_order" {
-			if c.Name == "totalprice" {
-				i_partprice = c
-				i_price = c
-				i_boxprice = c
-				v_discount_acmount = c
-				v_platform_rate = c
-				v_shop_rate = c
-				v_fee = c
-				rider_pay_status = c
-				rider_pay_time = c
-				i_dish_refund_price = c
-			}
-			//添加拼接字符串处理
-			switch c.Name {
-			case "contact":
-				si_zwnk = fmt.Sprintf("%s%s-", si_zwnk, values[i])
-			case "mobile":
-				si_zwnk = fmt.Sprintf("%s%s-", si_zwnk, values[i])
-			case "address":
-				si_zwnk = fmt.Sprintf("%s%s", si_zwnk, values[i])
-				si_zwnk_r = c
-			}
-		}
-
-		if rule.TableInfo.Name == "alp_dish_sales" {
-			//添加拼接字符串处理
-			switch c.Name {
-			case "category_name":
-				spercontact = fmt.Sprintf("%s%s_", spercontact, values[i])
-			case "dish_name":
-				spercontact = fmt.Sprintf("%s%s_", spercontact, values[i])
-				percontact_r = c
-			case "sku_name":
-				spercontact = fmt.Sprintf("%s%s_", spercontact, values[i])
-			case "dishsno":
-				spercontact = fmt.Sprintf("%s%s", spercontact, values[i])
-			}
-		}
-
-		if rule.TableInfo.Name == "alp_merchant_order_activity" {
-			//添加拼接字符串处理
-			switch c.Name {
-			case "activity_type":
-				si_id = fmt.Sprintf("%s%s_", si_id, values[i])
-			case "discount_acmount":
-				si_id = fmt.Sprintf("%s%.2f_", si_id, values[i])
-			case "shop_rate":
-				si_id = fmt.Sprintf("%s%.2f_", si_id, values[i])
-				v_shopfee = c
-				v_atotalprice = c
-			case "source":
-				si_id = fmt.Sprintf("%s%d", si_id, values[i])
-			}
-			if c.Name == "activity_name" {
-				si_id_r = c
-			}
-			if c.Name == "amwaid" {
-				v_asid = c
-				v_aorderstatus = c
-			}
-			if c.Name == "utime" {
-				v_aend_deliverytime = c
-			}
-		}
 		if mapped == false {
 			req.Data[c.Name] = r.makeReqColumnData(&c, values[i])
 		}
 	}
-	//log.Warnf("-2-------------------------%s------------------------------",rule.TableInfo.Name)
-	//定制化需求
-	if rule.TableInfo.Name == "alp_merchant_order" {
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
-		}
-		time.Sleep(100 * time.Millisecond)
-		conn, _ := client.Connect(r.c.MyAddr, r.c.MyUser, r.c.MyPassword, sdatabase)
-		//conn.Ping()
-		// ress, err := conn.Execute("select amoid from alp_merchant_order order by amoid desc limit 0,1")
-		// amoid, _ := ress.GetIntByName(0, "amoid")
-		s_amoid := "select sum(if(partstatus=2,refund_price*partcount,0)) partprice,sum(if(partstatus=2,originalprice*partcount,0)) dish_refund_price,sum(price) price ,sum(if(itemname='餐盒费',price,0)) boxprice from alp_merchant_order_item where amoid=" + req.ID
-		//fmt.Printf("%s", s_amoid)
-		res, err := conn.Execute(s_amoid)
-		if err != nil {
-			log.Errorf("err %v ", err)
-			return
-		}
-		partprice, _ := res.GetFloatByName(0, "partprice")
-		dish_refund_price, _ := res.GetFloatByName(0, "dish_refund_price")
-		price, _ := res.GetFloatByName(0, "price")
-		boxprice, _ := res.GetFloatByName(0, "boxprice")
-		f_partprice := fmt.Sprintf("%0.2f", partprice)
-		f_dish_refund_price := fmt.Sprintf("%0.2f", dish_refund_price)
-		f_price := fmt.Sprintf("%0.2f", price)
-		f_boxprice := fmt.Sprintf("%0.2f", boxprice)
-		i_partprice.Name = "i_partprice"
-		i_dish_refund_price.Name = "i_dish_refund_price"
-		i_price.Name = "price"
-		i_boxprice.Name = "i_boxprice"
-		a_amoid := "select sum(discount_acmount) discount_acmount,sum(platform_rate) platform_rate,sum(shop_rate) shop_rate from alp_merchant_order_activity  where amoid=" + req.ID
-		rss, err := conn.Execute(a_amoid)
-		if err != nil {
-			log.Errorf("err %v ", err)
-			return
-		}
-		discount_acmount, _ := rss.GetFloatByName(0, "discount_acmount")
-		platform_rate, _ := rss.GetFloatByName(0, "platform_rate")
-		shop_rate, _ := rss.GetFloatByName(0, "shop_rate")
-		f_discount_acmount := fmt.Sprintf("%0.2f", discount_acmount)
-		f_platform_rate := fmt.Sprintf("%0.2f", platform_rate)
-		f_shop_rate := fmt.Sprintf("%0.2f", shop_rate)
-		v_discount_acmount.Name = "v_discount_acmount"
-		v_platform_rate.Name = "v_platform_rate"
-		v_shop_rate.Name = "v_shop_rate"
-		//e_amoid := "select sum(fee) fee from alp_merchant_order_extras where amoid=" + strconv.FormatInt(amoid, 10)
-		e_amoid := "select sum(fee) fee from alp_merchant_order_extras where amoid=" + req.ID
-		rse, err := conn.Execute(e_amoid)
-		fee, _ := rse.GetFloatByName(0, "fee")
-		f_fee := fmt.Sprintf("%0.2f", fee)
-		v_fee.Name = "v_fee"
-		//订单附加表
-		oa_sql := "select rider_pay_status,rider_pay_time from alp_merchant_order_additional where amoid=" + req.ID
-		re_oa, err := conn.Execute(oa_sql)	
-		i_rider_pay_status, _ := re_oa.GetIntByName(0, "rider_pay_status")
-		i_rider_pay_time, _ := re_oa.GetStringByName(0, "rider_pay_time")
-		rider_pay_status.Name = "rider_pay_status"
-		rider_pay_time.Name = "rider_pay_time"
-		
-		req.Data["i_partprice"] = r.makeReqColumnData(&i_partprice, f_partprice)
-		req.Data["i_dish_refund_price"] = r.makeReqColumnData(&i_dish_refund_price, f_dish_refund_price)
-		req.Data["price"] = r.makeReqColumnData(&i_price, f_price)
-		req.Data["i_boxprice"] = r.makeReqColumnData(&i_boxprice, f_boxprice)
-		req.Data["v_discount_acmount"] = r.makeReqColumnData(&v_discount_acmount, f_discount_acmount)
-		req.Data["v_platform_rate"] = r.makeReqColumnData(&v_platform_rate, f_platform_rate)
-		req.Data["v_shop_rate"] = r.makeReqColumnData(&v_shop_rate, f_shop_rate)
-		req.Data["v_fee"] = r.makeReqColumnData(&v_fee, f_fee)
-		
-		//骑手缴费状态
-		req.Data["rider_pay_status"] = r.makeReqColumnData(&rider_pay_status, i_rider_pay_status)
-		//骑手缴费时间
-		req.Data["rider_pay_time"] = r.makeReqColumnData(&rider_pay_time, i_rider_pay_time)
-		
-		conn.Close()
-	}
-
-	//定制化需求
-	if rule.TableInfo.Name == "alp_merchant_order_activity" {
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
-		}
-		//time.Sleep(1000 * time.Millisecond)
-		aconn, _ := client.Connect(r.c.MyAddr, r.c.MyUser, r.c.MyPassword, sdatabase)
-		//aconn.Ping()
-		aress, err := aconn.Execute("select amoid from alp_merchant_order_activity where amoaid =" + req.ID)
-		aamoid, _ := aress.GetIntByName(0, "amoid")
-		as_amoid := "select ifnull(shopfee,0) as shopfee,totalprice+ifnull(order_delivery_pay,0)-ifnull(delivery_pay,0) as totalprice,sid,orderstatus,end_deliverytime from alp_merchant_order where amoid=" + strconv.FormatInt(aamoid, 10)
-		//fmt.Printf("%s", s_amoid)
-		ares, err := aconn.Execute(as_amoid)
-		if err != nil {
-			log.Errorf("err %v ", err)
-			return
-		}
-		shopfee, _ := ares.GetFloatByName(0, "shopfee")
-		atotalprice, _ := ares.GetFloatByName(0, "totalprice")
-		asid, _ := ares.GetIntByName(0, "sid")
-		aorderstatus, _ := ares.GetIntByName(0, "orderstatus")
-		aend_deliverytime, _ := ares.GetStringByName(0, "end_deliverytime")
-		f_shopfee := fmt.Sprintf("%0.2f", shopfee)
-		f_atotalprice := fmt.Sprintf("%0.2f", atotalprice)
-		//t, _ := time.Parse("2006-01-02 15:04:05", aend_deliverytime)
-		//t_aend_deliverytime := t.Unix().Format("2006-01-02 03:04:05")
-		v_shopfee.Name = "shopfee"
-		v_atotalprice.Name = "totalprice"
-		v_asid.Name = "sid"
-		v_aorderstatus.Name = "orderstatus"
-		v_aend_deliverytime.Name = "end_deliverytime"
-		req.Data["shopfee"] = r.makeReqColumnData(&v_shopfee, f_shopfee)
-		req.Data["totalprice"] = r.makeReqColumnData(&v_atotalprice, f_atotalprice)
-		req.Data["sid"] = r.makeReqColumnData(&v_asid, asid)
-		req.Data["orderstatus"] = r.makeReqColumnData(&v_aorderstatus, aorderstatus)
-		req.Data["end_deliverytime"] = r.makeReqColumnData(&v_aend_deliverytime,aend_deliverytime)
-		//添加插入处理
-		si_id_r.Name = "id"
-		req.Data["id"] = r.makeReqColumnData(&si_id_r, si_id)
-		aconn.Close()
-	}
-
-	if rule.TableInfo.Name == "alp_dish_sales" {
-		//添加插入处理
-		percontact_r.Name = "percontact"
-		req.Data["percontact"] = r.makeReqColumnData(&percontact_r, spercontact)
-	}
-	if rule.TableInfo.Name == "alp_merchant_order" {
-		//添加插入处理
-		si_zwnk_r.Name = "i_zwnk"
-		req.Data["i_zwnk"] = r.makeReqColumnData(&si_zwnk_r, si_zwnk)
-	}	
+	
 }
 
 func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 	beforeValues []interface{}, afterValues []interface{}) {
-	req.Data = make(map[string]interface{}, len(beforeValues))
-	//var spercontact string
-	//var si_zwnk string
-	//var si_id string
-	//var percontact_r schema.TableColumn
-	//var si_zwnk_r schema.TableColumn
-	//var si_id_r schema.TableColumn
-	var i_partprice schema.TableColumn
-	var i_dish_refund_price schema.TableColumn
-	var i_price schema.TableColumn
-	var i_boxprice schema.TableColumn
-	var v_discount_acmount schema.TableColumn
-	var v_platform_rate schema.TableColumn
-	var v_shop_rate schema.TableColumn
-	var v_fee schema.TableColumn
-	var rider_pay_status schema.TableColumn
-	var rider_pay_time schema.TableColumn	
-	//var v_shopfee schema.TableColumn
-	//var v_atotalprice schema.TableColumn
-	//var v_asid schema.TableColumn
-	//var v_aorderstatus schema.TableColumn
-	//var v_aend_deliverytime schema.TableColumn
-	var sdatabase string
+	req.Data = make(map[string]interface{}, len(beforeValues))	
 	// maybe dangerous if something wrong delete before?
 	req.Action = elastic.ActionUpdate
-
 	for i, c := range rule.TableInfo.Columns {
 		mapped := false
 		if !rule.CheckFilter(c.Name) {
@@ -887,87 +644,10 @@ func (r *River) makeUpdateReqData(req *elastic.BulkRequest, rule *Rule,
 
 			}
 		}
-		if c.Name=="createtime" || c.Name=="diningtime"{
-			c.Type=schema.TYPE_NUMBER
-			req.Data[c.Name]=r.getFieldValue(&c, fieldTypeDate, afterValues[i])
-			//log.Warnf("-1-------------------------%s-----------------",values[i])
-		}
 		if mapped == false {
 			req.Data[c.Name] = r.makeReqColumnData(&c, afterValues[i])
 		}
-
 	}
-	//定制化需求
-	if rule.TableInfo.Name == "alp_merchant_order" {
-		for _, s := range r.c.Sources {
-			sdatabase = s.Schema
-		}
-		conn, _ := client.Connect(r.c.MyAddr, r.c.MyUser, r.c.MyPassword, sdatabase)
-		//conn.Ping()
-		s_amoid := "select sum(if(partstatus=2,refund_price*partcount,0)) partprice,sum(if(partstatus=2,originalprice*partcount,0)) dish_refund_price,sum(price) price ,sum(if(itemname='餐盒费',price,0)) boxprice from alp_merchant_order_item where amoid=" + req.ID
-		res, err := conn.Execute(s_amoid)
-		if err != nil {
-			log.Errorf("err %v ", err)
-			return
-		}
-		partprice, _ := res.GetFloatByName(0, "partprice")
-		dish_refund_price, _ := res.GetFloatByName(0, "dish_refund_price")
-		price, _ := res.GetFloatByName(0, "price")
-		boxprice, _ := res.GetFloatByName(0, "boxprice")
-		f_partprice := fmt.Sprintf("%0.2f", partprice)
-		f_dish_refund_price := fmt.Sprintf("%0.2f", dish_refund_price)
-		f_price := fmt.Sprintf("%0.2f", price)
-		f_boxprice := fmt.Sprintf("%0.2f", boxprice)
-		i_partprice.Name = "i_partprice"
-		i_dish_refund_price.Name = "i_dish_refund_price"
-		i_price.Name = "price"
-		i_boxprice.Name = "i_boxprice"
-		a_amoid := "select sum(discount_acmount) discount_acmount,sum(platform_rate) platform_rate,sum(shop_rate) shop_rate from alp_merchant_order_activity  where amoid=" + req.ID
-		rss, err := conn.Execute(a_amoid)
-		discount_acmount, _ := rss.GetFloatByName(0, "discount_acmount")
-		platform_rate, _ := rss.GetFloatByName(0, "platform_rate")
-		shop_rate, _ := rss.GetFloatByName(0, "shop_rate")
-		f_discount_acmount := fmt.Sprintf("%0.2f", discount_acmount)
-		f_platform_rate := fmt.Sprintf("%0.2f", platform_rate)
-		f_shop_rate := fmt.Sprintf("%0.2f", shop_rate)
-		v_discount_acmount.Name = "v_discount_acmount"
-		v_platform_rate.Name = "v_platform_rate"
-		v_shop_rate.Name = "v_shop_rate"
-		//e_amoid := "select sum(fee) fee from alp_merchant_order_extras where amoid=" + strconv.FormatInt(amoid, 10)
-		e_amoid := "select sum(fee) fee from alp_merchant_order_extras where amoid=" + req.ID
-		rse, err := conn.Execute(e_amoid)
-		fee, _ := rse.GetFloatByName(0, "fee")
-		f_fee := fmt.Sprintf("%0.2f", fee)
-		v_fee.Name = "v_fee"
-		
-		//订单附加表
-		oa_sql := "select rider_pay_status,rider_pay_time from alp_merchant_order_additional where amoid=" + req.ID
-		re_oa, err := conn.Execute(oa_sql)	
-		if err != nil {
-			log.Errorf("err %v ", err)
-			return
-		}		
-		i_rider_pay_status, _ := re_oa.GetIntByName(0, "rider_pay_status")
-		i_rider_pay_time, _ := re_oa.GetStringByName(0, "rider_pay_time")
-		rider_pay_status.Name = "rider_pay_status"
-		rider_pay_time.Name = "rider_pay_time"
-
-		
-		req.Data["i_partprice"] = r.makeReqColumnData(&i_partprice, f_partprice)
-		req.Data["i_dish_refund_price"] = r.makeReqColumnData(&i_dish_refund_price, f_dish_refund_price)
-		req.Data["price"] = r.makeReqColumnData(&i_price, f_price)
-		req.Data["i_boxprice"] = r.makeReqColumnData(&i_boxprice, f_boxprice)
-		req.Data["v_discount_acmount"] = r.makeReqColumnData(&v_discount_acmount, f_discount_acmount)
-		req.Data["v_platform_rate"] = r.makeReqColumnData(&v_platform_rate, f_platform_rate)
-		req.Data["v_shop_rate"] = r.makeReqColumnData(&v_shop_rate, f_shop_rate)
-		req.Data["v_fee"] = r.makeReqColumnData(&v_fee, f_fee)
-		//骑手缴费状态
-		req.Data["rider_pay_status"] = r.makeReqColumnData(&rider_pay_status, i_rider_pay_status)
-		//骑手缴费时间
-		req.Data["rider_pay_time"] = r.makeReqColumnData(&rider_pay_time, i_rider_pay_time)
-		
-		conn.Close()
-	}	
 }
 
 // If id in toml file is none, get primary keys in one row and format them into a string, and PK must not be nil
