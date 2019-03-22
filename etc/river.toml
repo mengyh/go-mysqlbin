@@ -17,7 +17,7 @@ myto_addr = "127.0.0.2:3306"
 myto_user = "root"
 myto_pass = "a12345"
 myto_charset = "utf8"
-
+myto_maxcon=300
 # Path to store data, like master.info, if not set or empty,
 # we must use this to support breakpoint resume syncing. 
 # TODO: support other storage, like etcd. 

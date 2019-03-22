@@ -119,9 +119,7 @@ func (c *Canal) runSyncBinlog() error {
 			}
 		case *replication.QueryEvent:
 			if mb := checkRenameTable(e); mb != nil {
-				if len(mb[1]) == 0 {
-					mb[1] = e.Schema
-				}
+				mb[1] = e.Schema
 				savePos = true
 				force = true
 				c.ClearTableCache(mb[1], mb[2])

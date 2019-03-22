@@ -84,15 +84,6 @@ func NewRiver(c *Config) (*River, error) {
 		cfg.Password = r.c.ESPassword
 		cfg.Https = r.c.ESHttps
 		r.es = elastic.NewClient(cfg)
-	}else{
-		//var sdatabase string
-		//for _, s := range r.c.Sources {
-		//	sdatabase = s.Schema
-		//}
-		//dns := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8", r.c.MytoUser, r.c.MytoPassword, r.c.MytoAddr, sdatabase)
-		//r.my, err = sqlx.Connect("mysql",dns)
-		//r.my, err = client.Connect(r.c.MytoAddr, r.c.MytoUser, r.c.MytoPassword, sdatabase)
-		//r.posbuf=04
 	}
 	r.lastsavetime=time.Now()
 	r.rdosql=0
@@ -280,13 +271,12 @@ func (r *River) prepareRule() error {
 
 	rules := make(map[string]*Rule)
 	for key, rule := range r.rules {
+		
 		if rule.TableInfo, err = r.canal.GetTable(rule.Schema, rule.Table); err != nil {
 			return errors.Trace(err)
 		}
-		if rule.TableInfo.Name=="alp_merchant_order_error"{
-			continue
-		}
 		if len(rule.TableInfo.PKColumns) == 0 {
+			rules[key] = rule
 			continue
 			if !r.c.SkipNoPkTable {
 				return errors.Errorf("%s.%s must have a PK for a column", rule.Schema, rule.Table)

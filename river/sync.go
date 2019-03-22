@@ -13,7 +13,6 @@ import (
 	"github.com/siddontang/go-mysql/schema"
 	log "github.com/sirupsen/logrus"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 	"regexp"
@@ -41,7 +40,13 @@ type posSaver struct {
 type eventHandler struct {
 	r *River
 }
-
+var (
+	expCreateTable1 = regexp.MustCompile("(?i)^CREATE\\s+TABLE\\s+IF\\s+NOT\\s+EXISTS\\s.*?`{0,1}(.*?)`{0,1}\\s.*")
+	expCreateTable2 = regexp.MustCompile("(?i)^CREATE\\s+TABLE\\s+.*?`{0,1}(.*?)`{0,1}\\s.*")
+	expDropTable   = regexp.MustCompile("(?i)^DROP\\s+TABLE\\s+.*?`{0,1}(.*?)`{0,1}\\s.*")
+	expAlterTable  = regexp.MustCompile("(?i)^ALTER\\s+TABLE\\s+.*?`{0,1}(.*?)`{0,1}\\.{0,1}`{0,1}([^`\\.]+?)`{0,1}\\s.*")
+	expRenameTable = regexp.MustCompile("(?i)^RENAME\\s+TABLE.*TO\\s+.*?`{0,1}(.*?)`{0,1}\\.{0,1}`{0,1}([^`\\.]+?)`{0,1}$")
+)
 func (h *eventHandler) OnRotate(e *replication.RotateEvent) error {
 	pos := mysql.Position{
 		string(e.NextLogName),
@@ -58,7 +63,6 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 		var sdatabase string
 		var inSchema string
 		var dosql string
-		var tablename string
 		for _, s := range h.r.c.Sources {
 			sdatabase = s.Schema
 		}
@@ -66,18 +70,26 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 		if inSchema==sdatabase && len(e.Query)>5{
 			dosql=fmt.Sprintf("%s",e.Query)
 			dosql=strings.ToLower(dosql)
-			if strings.Index(dosql,"create table")>=0{
-				var mb = [][]byte{}
-				reg := regexp.MustCompile("(?i)^create\\s+table\\s+(.*?)+\\s")
-				mb=reg.FindSubmatch(e.Query)
-				tablename=fmt.Sprintf("%s",mb[1])
-				reg1 := regexp.MustCompile("[0-9a-zA-Z_]+")
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
-				err := h.r.newRule(sdatabase, tablename)
-				if err != nil {
-					log.Warnf("---%s------%s------%s------",dosql,tablename,err)
-					//return errors.Trace(err)
+			conn, _ := client.Connect(h.r.c.MytoAddr, h.r.c.MytoUser, h.r.c.MytoPassword, sdatabase)
+			res, err := conn.Execute(dosql)
+			if err != nil {
+				log.Warnf("-------------------------%s-----------------",err,res)
+			}
+			mb := checkRenameTable(e)
+			if mb != nil {
+				if(len(mb)>2){
+					mb[1] = mb[2]
 				}
+				tablename:=fmt.Sprintf("%s",mb[1])
+				dosql=strings.ToLower(dosql)
+				if strings.Index(dosql,"create table")>=0{
+					err := h.r.newRule(sdatabase, tablename)
+					if err != nil {
+						log.Warnf("---%s------%s------%s------",dosql,mb[1],err)
+					}
+				}
+				h.r.canal.ClearTableCache(e.Schema, mb[1])
+				log.Infof("table structure changed, clear table cache: %s.%s\n", e.Schema, mb[1])
 				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
 				if !ok {
 					return nil
@@ -88,49 +100,10 @@ func (h *eventHandler) OnDDL(nextPos mysql.Position, e *replication.QueryEvent) 
 				}else{
 					h.r.rules[ruleKey(sdatabase, tablename)]=rule
 				}
-			}else if strings.Index(dosql,"drop table")>=0{
-				reg := regexp.MustCompile("\\`[0-9a-zA-Z_]+\\`")
-				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
-				reg1 := regexp.MustCompile(`[0-9a-zA-Z_]+`)
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
-				rules := make(map[string]*Rule)
-				for key, rule := range h.r.rules {
-					if key == ruleKey(sdatabase, tablename) {
-						continue
-					} else {
-						rules[key] = rule
-					}
-				}
-				h.r.rules = rules
 			}else{
-				reg := regexp.MustCompile("table\\s+[0-9a-zA-Z_`]+\\s+")
-				tablename=fmt.Sprintf("%s",reg.FindString(dosql));
-				reg1 := regexp.MustCompile("\\s+[0-9a-zA-Z_`]+")
-				tablename=fmt.Sprintf("%s",reg1.FindString(tablename))
-				reg2 := regexp.MustCompile("[0-9a-zA-Z_]+")
-				tablename=fmt.Sprintf("%s",reg2.FindString(tablename))
-				var err error
-				rule, ok := h.r.rules[ruleKey(sdatabase, tablename)]
-				if !ok {
-					return nil
-				}
-				rule.TableInfo,err = h.r.canal.GetTable(sdatabase, tablename)
-				if err != nil {
-					log.Warnf("---------%s----------------%s-----------------",tablename,err)
-				}else{
-					h.r.rules[ruleKey(sdatabase, tablename)]=rule
-				}
-
+				log.Warnf("-----------------%v-----------------",mb)
 			}
-			conn, _ := client.Connect(h.r.c.MytoAddr, h.r.c.MytoUser, h.r.c.MytoPassword, sdatabase)
-			res, err := conn.Execute(dosql)
-			if err != nil {
-				//return errors.Trace(err)
-				log.Warnf("-------------------------%s-----------------",err)
-			}else{
-				log.Warnf("-------------------------%v-----------------",res)
-			}
-
+			
 		}
 	}
 	h.r.syncCh <- posSaver{nextPos, true}
@@ -145,7 +118,7 @@ func (h *eventHandler) OnXID(nextPos mysql.Position) error {
 func (h *eventHandler) OnRow(e *canal.RowsEvent) error {
 	rule, ok := h.r.rules[ruleKey(e.Table.Schema, e.Table.Name)]
 	if !ok {
-		return nil
+	      return nil	
 	}
 	var reqs []*elastic.BulkRequest
 	var err error
@@ -172,7 +145,6 @@ func (h *eventHandler) OnRow(e *canal.RowsEvent) error {
 func (h *eventHandler) OnGTID(gtid mysql.GTIDSet) error {
 	return nil
 }
-
 func (h *eventHandler) OnPosSynced(pos mysql.Position, force bool) error {
 	return nil
 }
@@ -493,7 +465,6 @@ func (r *River) makeUpdateRequest(rule *Rule, rows [][]interface{}) ([]*elastic.
 			dosql += "="
 			dosql += "'"+wherev+"'"
 		}
-		//log.Warnf("-----------%s------------------------------",dosql)
 		if len(r.c.ESAddr)>0{
 		}else{
 			for{
@@ -747,4 +718,22 @@ func (r *River) getFieldValue(col *schema.TableColumn, fieldType string, value i
 		fieldValue = r.makeReqColumnData(col, value)
 	}
 	return fieldValue
+}
+func checkRenameTable(e *replication.QueryEvent) [][]byte {
+	var mb = [][]byte{}
+	if mb = expCreateTable1.FindSubmatch(e.Query);mb !=nil{
+		return mb
+	}else if mb = expCreateTable2.FindSubmatch(e.Query);mb !=nil{
+		return mb
+	}
+	if mb = expDropTable.FindSubmatch(e.Query);mb !=nil{
+		return mb
+	}
+	if mb = expAlterTable.FindSubmatch(e.Query); mb != nil {
+		return mb
+	}
+	if mb = expRenameTable.FindSubmatch(e.Query); mb != nil {
+		return mb
+	}
+	return nil
 }
