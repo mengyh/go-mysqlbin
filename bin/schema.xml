@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!DOCTYPE mycat:schema SYSTEM "schema.dtd">
+<mycat:schema xmlns:mycat="http://io.mycat/">
+
+	<schema name="alipos" checkSQLschema="false" sqlMaxLimit="100" dataNode="dn1">
+		<!-- auto sharding by id (long) -->
+		<!--<table name="alp_merchant_order" primaryKey="amoid" subTables="alp_merchant_order$1-13" dataNode="dn1" rule="sharding-by-month">-->
+		     <!--<childTable name="alp_merchant_order_activity" primaryKey="amoaid" joinKey="amoid" parentKey="amoid"/>
+			 <childTable name="alp_merchant_order_item" primaryKey="moiid" joinKey="amoid" parentKey="amoid"/>-->
+	    <!--</table>-->
+		<!--<table name="alp_merchant_order_activity" primaryKey="amoaid" dataNode="dn1"/>
+		<table name="alp_merchant_order_item" primaryKey="moiid" dataNode="dn1"/>-->
+	</schema>
+	<!-- <dataNode name="dn1$0-743" dataHost="localhost1" database="db$0-743"
+		/> -->
+	<dataNode name="dn1" dataHost="localhost1" database="alipos" />
+	<!--<dataNode name="dn4" dataHost="sequoiadb1" database="SAMPLE" />
+	 <dataNode name="jdbc_dn1" dataHost="jdbchost" database="db1" />
+	<dataNode	name="jdbc_dn2" dataHost="jdbchost" database="db2" />
+	<dataNode name="jdbc_dn3" 	dataHost="jdbchost" database="db3" /> -->
+	<dataHost name="localhost1" maxCon="1000" minCon="10" balance="3"
+			  writeType="0" dbType="mysql" dbDriver="native" switchType="1"  slaveThreshold="100">
+		<heartbeat>select user()</heartbeat>
+		<!-- can have multi write hosts -->
+		<writeHost host="node1" url="eco-ceshidata.mysql.rds.aliyuncs.com:3306" user="ceshi" password="ceshi@321">
+			<!-- can have multi read hosts -->
+			<!--<readHost host="node1" url="127.0.0.1:3305" user="read1" password="read@321" />-->
+			<readHost host="node1" url="ceshi-slave1.mysql.rds.aliyuncs.com:3306" user="read" password="read@321" />
+			<!--<readHost host="node1" url="127.0.0.1:3306" user="root" password="a12345" /> -->
+			<!--<readHost host="node2" url="192.168.1.231:3306" user="root" password="a12345" /> -->
+			<!--<readHost host="node3" url="192.168.1.232:3306" user="root" password="a12345" />-->
+		</writeHost>
+	</dataHost>
+	<!--
+		<dataHost name="sequoiadb1" maxCon="1000" minCon="1" balance="0" dbType="sequoiadb" dbDriver="jdbc">
+		<heartbeat> 		</heartbeat>
+		 <writeHost host="hostM1" url="sequoiadb://1426587161.dbaas.sequoialab.net:11920/SAMPLE" user="jifeng" 	password="jifeng"></writeHost>
+		 </dataHost>
+
+	  <dataHost name="oracle1" maxCon="1000" minCon="1" balance="0" writeType="0" 	dbType="oracle" dbDriver="jdbc"> <heartbeat>select 1 from dual</heartbeat>
+		<connectionInitSql>alter session set nls_date_format='yyyy-mm-dd hh24:mi:ss'</connectionInitSql>
+		<writeHost host="hostM1" url="jdbc:oracle:thin:@127.0.0.1:1521:nange" user="base" 	password="123456" > </writeHost> </dataHost>
+
+		<dataHost name="jdbchost" maxCon="1000" 	minCon="1" balance="0" writeType="0" dbType="mongodb" dbDriver="jdbc">
+		<heartbeat>select 	user()</heartbeat>
+		<writeHost host="hostM" url="mongodb://192.168.0.99/test" user="admin" password="123456" ></writeHost> </dataHost>
+
+		<dataHost name="sparksql" maxCon="1000" minCon="1" balance="0" dbType="spark" dbDriver="jdbc">
+		<heartbeat> </heartbeat>
+		 <writeHost host="hostM1" url="jdbc:hive2://feng01:10000" user="jifeng" 	password="jifeng"></writeHost> </dataHost> -->
+
+	<!-- <dataHost name="jdbchost" maxCon="1000" minCon="10" balance="0" dbType="mysql"
+		dbDriver="jdbc"> <heartbeat>select user()</heartbeat> <writeHost host="hostM1"
+		url="jdbc:mysql://localhost:3306" user="root" password="123456"> </writeHost>
+		</dataHost> -->
+</mycat:schema>
