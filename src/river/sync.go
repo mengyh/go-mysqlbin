@@ -344,7 +344,6 @@ func (r *River) makeRequest(rule *Rule, action string, rows [][]interface{}) ([]
 func (r *River) runsql(dosql string){
 	var err error
 	var sdatabase string
-	var pos mysql.Position
 	for _, s := range r.c.Sources {
 		sdatabase = s.Schema
 	}
@@ -361,12 +360,6 @@ func (r *River) runsql(dosql string){
 		//log.Warnf("---------%s-----------%s-----------------","Warnf:wait for next do",err,res)
 		time.Sleep(500*time.Nanosecond)
 		go r.wrunsql(dosql)
-	}else{
-		if err := r.master.Save(pos); err != nil {
-			log.Errorf("save sync position %s err %v, close sync", pos, err)
-			r.cancel()
-			return
-		}
 	}
 	if(r.rdosql<10){
 		r.rdosql=0;
